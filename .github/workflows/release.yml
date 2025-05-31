@@ -10,14 +10,125 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
+
     steps:
-    - name: Download QEMU image file
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Read configuration
+      id: config
       run: |
-        echo "Downloading QEMU image file..."
-        curl -L -o "qemu-img-windows-x64-${{ github.ref_name }}.zip" "https://cloudbase.it/downloads/qemu-img-win-x64-2_3_0.zip"
-        echo "Download completed successfully"
+        echo "Reading QEMU configuration..."
+
+        EXE_URL=$(jq -r '.source.exe_url' release.json)
+        echo "exe_url=$EXE_URL" >> $GITHUB_OUTPUT
+
+        SHA512=$(jq -r '.source.sha512' release.json)
+        echo "sha512=$SHA512" >> $GITHUB_OUTPUT
+
+        URL_HASH=$(echo "$EXE_URL" | sha256sum | cut -d' ' -f1 | head -c 16)
+        echo "url_hash=$URL_HASH" >> $GITHUB_OUTPUT
+
+        echo "Config loaded - URL: $EXE_URL"
+        echo "URL hash for caching: $URL_HASH"
+
+    - name: Cache QEMU installer
+      uses: actions/cache@v4
+      with:
+        path: installer.exe
+        key: qemu-installer-${{ steps.config.outputs.url_hash }}
+        restore-keys: |
+          qemu-installer-
+
+    - name: Download QEMU installer (if not cached)
+      run: |
+        if [ ! -f "installer.exe" ]; then
+          echo "📥 Downloading QEMU installer from ${{ steps.config.outputs.exe_url }}"
+          echo "This may take a while..."
+          curl -L -o "installer.exe" "${{ steps.config.outputs.exe_url }}" --progress-bar
+          echo "✅ Download completed successfully"
+          ls -la installer.exe
+        else
+          echo "✅ Using cached installer"
+          ls -la installer.exe
+        fi
+
+    - name: Verify SHA512 checksum
+      run: |
+        echo "🔍 Verifying SHA512 checksum..."
+        EXPECTED_SHA512="${{ steps.config.outputs.sha512 }}"
+        ACTUAL_SHA512=$(sha512sum installer.exe | cut -d' ' -f1)
+
+        echo "Expected: $EXPECTED_SHA512"
+        echo "Actual:   $ACTUAL_SHA512"
+        if [ "$EXPECTED_SHA512" != "$ACTUAL_SHA512" ]; then
+          echo "❌ SHA512 verification failed!"
+          echo "The downloaded file does not match the expected checksum."
+          echo "This could indicate a corrupted download or security issue."
+
+          # Remove the corrupted file locally
+          echo "🗑️ Removing corrupted installer file..."
+          rm -f installer.exe
+
+          # Delete the cache entry from GitHub's cache system
+          echo "🗑️ Clearing GitHub Actions cache..."
+          CACHE_KEY="qemu-installer-${{ steps.config.outputs.url_hash }}"
+          gh cache delete "$CACHE_KEY" || echo "⚠️ Could not delete cache (may not exist)"
+
+          echo "💡 Both local file and cache have been cleared. Re-running this workflow will download a fresh copy."
+          exit 1
+        else
+          echo "✅ SHA512 verification passed"
+        fi
+
+    - name: Extract files from installer
+      run: |
+        echo "📦 Extracting files from QEMU installer..."
+
+        # Create extraction directory
+        mkdir -p temp_extract
+        mkdir -p extracted_files
+
+        # Extract installer contents
+        echo "Extracting installer contents..."
+        7z x installer.exe -otemp_extract -y
+
+        # Read the list of files to extract
+        FILES=$(jq -r '.extract.files[]' release.json)
+
+        # Validate that we have each file
+        echo "🔍 Looking for required files..."
+        for file in $FILES; do
+          echo "Searching for: $file"
+          FOUND_FILE=$(find temp_extract -name "$file" -type f | head -1)
+
+          if [ -z "$FOUND_FILE" ]; then
+            echo "❌ Required file not found: $file"
+            echo "Available files in installer:"
+            find temp_extract -name "*.exe" -o -name "*.dll" | head -20
+            exit 1
+          else
+            echo "✅ Found: $FOUND_FILE"
+            cp "$FOUND_FILE" extracted_files/
+          fi
+        done
+
+        echo "📋 Files successfully extracted:"
+        ls -la extracted_files/
+
+    - name: Create release archive
+      run: |
+        echo "📦 Creating release archive..."
+        cd extracted_files
+        zip -r "../qemu-img-windows-x64-${{ github.ref_name }}.zip" .
+        cd ..
+
+        echo "✅ Archive created successfully:"
         ls -la "qemu-img-windows-x64-${{ github.ref_name }}.zip"
+
+        # Show contents for verification
+        echo "📋 Archive contents:"
+        unzip -l "qemu-img-windows-x64-${{ github.ref_name }}.zip"
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
@@ -27,4 +138,4 @@ jobs:
         draft: false
         prerelease: false
         body: |
-          - Source: https://cloudbase.it/downloads/qemu-img-win-x64-2_3_0.zip
+          - Source: ${{ steps.config.outputs.exe_url }}

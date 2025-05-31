@@ -1,0 +1,40 @@
+{
+    "version": "9.2.0",
+    "source": {
+        "exe_url": "https://qemu.weilnetz.de/w64/2024/qemu-w64-setup-20241220.exe",
+        "sha512": "f0c45849d75ecc75fffc29448741bbfdd732d3bea6f606d7f1a8bc3543845cb25ce0a0b5c716d4661d954877c907007a9d96c6136d015fb96afad29e57687bde"
+    },
+    "extract": {
+        "files": [
+            "qemu-img.exe",
+            "libbz2-1.dll",
+            "libcurl-4.dll",
+            "libglib-2.0-0.dll",
+            "libgnutls-30.dll",
+            "libnfs-14.dll",
+            "libssh.dll",
+            "zlib1.dll",
+            "libzstd.dll",
+            "libwinpthread-1.dll",
+            "libssp-0.dll",
+            "libidn2-0.dll",
+            "libbrotlidec.dll",
+            "libpsl-5.dll",
+            "libssh2-1.dll",
+            "libiconv-2.dll",
+            "libintl-8.dll",
+            "libunistring-5.dll",
+            "libbrotlicommon.dll",
+            "libpcre2-8-0.dll",
+            "libbrotlienc.dll",
+            "libgcc_s_seh-1.dll",
+            "libgmp-10.dll",
+            "libhogweed-6.dll",
+            "libnettle-8.dll",
+            "libp11-kit-0.dll",
+            "libtasn1-6.dll",
+            "libffi-8.dll",
+            "libcrypto-3-x64.dll"
+        ]
+    }
+}
